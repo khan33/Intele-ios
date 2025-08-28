@@ -1,0 +1,41 @@
+name: iOS PR Checks (Full)
+
+on:
+  pull_request:
+    branches:
+      - Development
+
+jobs:
+  pr-checks:
+    name: Lint, Build & Test (Full)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      - name: Install Dependencies
+        run: |
+          gem install cocoapods fastlane --no-document
+          pod install --repo-update
+        working-directory: ios
+
+      - name: Run SwiftLint
+        run: |
+          brew install swiftlint || true
+          swiftlint lint --strict
+        continue-on-error: true
+
+      - name: Run Tests
+        run: fastlane test

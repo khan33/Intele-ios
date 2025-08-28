@@ -1,0 +1,76 @@
+name: iOS CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - Staging
+      - Production
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy iOS App
+    runs-on: macos-latest
+
+    steps:
+      # ------------------------------
+      # 1. Checkout Source Code
+      # ------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ------------------------------
+      # 2. Setup Xcode Environment
+      # ------------------------------
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      # ------------------------------
+      # 3. Cache CocoaPods
+      # ------------------------------
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: Pods
+          key: ${{ runner.os }}-pods-${{ hashFiles('**/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pods-
+
+      # ------------------------------
+      # 4. Install Dependencies
+      # ------------------------------
+      - name: Install CocoaPods
+        run: |
+          gem install cocoapods --no-document
+          pod install --repo-update
+        working-directory: ios
+
+      # ------------------------------
+      # 5. Install Fastlane
+      # ------------------------------
+      - name: Install Fastlane
+        run: gem install fastlane --no-document
+
+      # ------------------------------
+      # 6. Setup Certificates (Fastlane Match)
+      # ------------------------------
+      - name: Setup Code Signing
+        run: fastlane match appstore --readonly
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+
+      # ------------------------------
+      # 7. Build & Deploy
+      # ------------------------------
+      - name: Build and Deploy
+        run: |
+          if [[ "${GITHUB_REF_NAME}" == "Staging" ]]; then
+            fastlane beta
+          elif [[ "${GITHUB_REF_NAME}" == "Production" ]]; then
+            fastlane release
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
